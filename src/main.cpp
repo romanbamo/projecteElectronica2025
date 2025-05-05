@@ -370,7 +370,7 @@ void setup() {
     Control loff = {0x03, 0b00010000};//Threshold 95%, 6nA corrent de lead-off, detecció DC 
     Control ch1set = {0x04, 0b11010001};//Guany 8, Input shorted
     Control ch2set = {0x05, 0b01100000};//Guany 12, Normal Input
-    Control rldSens = {0x06, 0b00000000};//ChopFrequency fMod/16, RLD leadOff deshabilitat, RLD no conectat a cap entrada.
+    Control rldSens = {0x06, 0b00000000};//{0b01101100}ChopFrequency fMod/4, RLD leadOff deshabilitat, RLD no conectat a cap entrada.
     Control loffSens = {0x07, 0b00000000};//LeadOff deshabilitat
     Control loffStat = {0x08, 0b00000000};//Ignorat per que LOFFSENS no s'utilitza
     Control resp1 = {0x09, 0b11000010};//Modulació i Demodulació activa amb 0 graus de desfase i rellotge intern
