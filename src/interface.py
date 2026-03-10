@@ -67,53 +67,42 @@ stopButton = Button(stopAx, 'Aturar', color='red', hovercolor='salmon')
 
 def aturar(event=None):
     """Funció que s'executa quan es prem el botó d'aturada o es tanca la finestra"""
-    global stopFlag, stop_event
+    global stopFlag
     print("S'ha premut el botó d'aturada o s'ha tancat la finestra.")
     stopFlag = True
-    stop_event.set()  # Notifica al fil BLE que s'ha d'aturar
     plt.close()
 
 stopButton.on_clicked(aturar)
 
 def callback(sender, data):
-    """Funció callback que rep dades del dispositiu BLE"""
+    """Funció callback que rep dades del dispositiu BLE
+    
+    Args:
+        sender: Identificador del dispositiu BLE
+        data: Dades rebudes en format bytes
+    """
     try:
         decoded = data.decode("utf-8").strip()
-        print(f"Dada rebuda: {decoded}")  # Debug
         if decoded:
-            if decoded.startswith("¿"):
-                print(decoded)
-            else:
-                with dataLock:
-                    dataQueue.append(decoded)
-    except UnicodeDecodeError:
-        print("[ERROR] Dades no UTF-8:", data)
+            with dataLock:
+                dataQueue.append(decoded)
     except Exception as e:
-        print("[ERROR] Callback:", e)
+        print("[ERROR DE CODIFICACIÓ BLE]:", e)
 
-async def runBle(stop_event):
+async def runBle():
     """Funció asíncrona per gestionar la connexió BLE"""
-    try:
-        async with BleakClient(ADDRESS, timeout=20.0) as client:
-            print(f"Connectat al dispositiu {ADDRESS}")
-            await client.start_notify(CHARACTERISTIC_UUID, callback)
-            print("Notificacions activades. Esperant dades...")
-            
-            while not stop_event.is_set():  # Utilitza un Event per controlar l'aturada
-                await asyncio.sleep(1)
-                
-    except Exception as e:
-        print(f"Error de connexió BLE: {e}")
-        stop_event.set()  # Atura el programa en cas d'error
+    async with BleakClient(ADDRESS) as client:
+        print("Connectat al dispositiu...")
+        await client.start_notify(CHARACTERISTIC_UUID, callback)
+        while not stopFlag:
+            await asyncio.sleep(0.1)
 
-def startBleThread(stop_event):
+def startBleThread():
     """Inicia el fil d'execució per a la connexió BLE"""
-    asyncio.run(runBle(stop_event))
-
+    asyncio.run(runBle())
 
 # Iniciem el fil BLE
-stop_event = threading.Event()
-bleThread = threading.Thread(target=startBleThread, args=(stop_event,), daemon=True)
+bleThread = threading.Thread(target=startBleThread, daemon=True)
 bleThread.start()
 
 # Configuració per detectar tancament de finestra
@@ -132,24 +121,23 @@ try:
                 novesDades.append(dataQueue.popleft())
 
         currentTime = time.time()
-        for bloc in novesDades:
-            paquetDades = bloc.split(";")
+        
         # Processem cada paquet de dades
-            for paquet in paquetDades:
-                parts = paquet.split(",")
-                if len(parts) == 5:
-                    try:
-                        valRespiratoria, valCardiaca, valSNS, valSNP, estres = map(float, parts)
-                        timeStamp = currentTime - startTime
-                        
-                        dataCardiaca.append(valCardiaca)
-                        dataRespiratoria.append(valRespiratoria)
-                        timeStamps.append(timeStamp)
-                        if valSNS != 0 and valSNP != 0:
-                            dataSistemaNervios[0], dataSistemaNervios[1] = valSNS, valSNP
-                            nivellEstres = estres
-                    except ValueError:
-                        continue
+        for paquet in novesDades:
+            parts = paquet.split(",")
+            if len(parts) == 5:
+                try:
+                    valRespiratoria, valCardiaca, valSNS, valSNP, estres = map(float, parts)
+                    timeStamp = currentTime - startTime
+                    
+                    dataCardiaca.append(valCardiaca)
+                    dataRespiratoria.append(valRespiratoria)
+                    timeStamps.append(timeStamp)
+                    if valSNS != 0 and valSNP != 0:
+                        dataSistemaNervios[0], dataSistemaNervios[1] = valSNS, valSNP
+                        nivellEstres = estres
+                except ValueError:
+                    continue
 
         # Actualitzem gràfics amb temps
         if timeStamps:
