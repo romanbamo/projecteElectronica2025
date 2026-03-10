@@ -14,30 +14,30 @@ using namespace std;
 #define CHARACTERISTIC_UUID "7a6ffc80-ef27-4a4d-a8a6-56d93f8feff3"
 #define BUFFER_SIZE 50
 #define RR_BUFFER_SIZE 1024
-#define SAMPLING_RATE 500
+#define SAMPLING_RATE 250
+
 #define MAX_CHUNK_SIZE 20
-#define LLINDAR 5872025 //70% d'escala
 
 //Definició de pins
 const int START = 33;
 const int RESET = 27;
-const int DRDY = 21;
+const int DRDY =21;
 const int GPIO1 = 15;
 const int GPIO2 = 4;
-const int MISO_PIN = 19;
-const int MOSI_PIN = 23;
+const int MISO = 19;
+const int MOSI = 23;
 const int SCLK = 18;
 const int CS = 32;
-const int TX_PIN = 17;
-const int RX_PIN = 16;
+const int TX = 17;
+const int RX = 16;
 
 volatile bool dataReadyFlag = false; 
 
 queue<uint8_t> buffer;
-queue<int32_t> rrBuffer;
 
 int32_t ecgBuffer[BUFFER_SIZE];
 int32_t respBuffer[BUFFER_SIZE];
+int32_t rrBuffer[BUFFER_RR]
 int ecgIndex = 0;
 int respIndex = 0;
 
@@ -53,15 +53,13 @@ float ecg;
 float resp;
 
 bool bufferPle = false;
-bool comunicacioSPI_OK = false;
-bool notif_enviada = false;
 
-float potenciaLF = 0.0;
-float potenciaHF = 0.0;
-float stress = 0.0;
+float potenciaLF;
+float potenciaHF;
+float stress;
 
 //////////////////////////////////////////////////////////////////////
-uint16_t samplingTime = (uint16_t)((1.0 / SAMPLING_RATE) * 1000000);  // temps de mostreig en milisegons
+u_int16_t samplingTime =(1/SAMPLING_RATE)*1000000;  // temps de mostreig en milisegons
 //unsigned long samplingTime =2000; //microsegons
 uint32_t nsamples = 0; // compta el numero de mostres
 
@@ -82,17 +80,17 @@ float dt = 1.0 / fs;
 void guardarECG(int32_t mostra) {
     ecgBuffer[ecgIndex] = mostra;
     ecgIndex = (ecgIndex + 1);
-    if (ecgIndex >= RR_BUFFER_SIZE) {
+    if (ecgIndex >= BUFFER_SIZE) {
         ecgIndex = 0;
         bufferPle = true;
     }
 }
 
 
-// void guardarResp(int32_t mostra) {
-//     respBuffer[respIndex] = mostra;
-//     respIndex = (respIndex + 1) % BUFFER_SIZE;
-// }
+void guardarResp(int32_t mostra) {
+    respBuffer[respIndex] = mostra;
+    respIndex = (respIndex + 1) % BUFFER_SIZE;
+}
 
 // Llegim 9 bytes per SPI i els posem a la cua
 void readSPIData() {
@@ -105,9 +103,9 @@ void readSPIData() {
 }
 
 // Processar blocs de 3 bytes (24 bits)
-pair<float, float> processSamples() {
-    int32_t ecgData = 0;
-    int32_t respData = 0;
+uint32_t processSamples() {
+    int32_t ecg;
+    int32_t resp;
     while (buffer.size() >= 9) {
         // STATUS 3 bytes
         uint32_t status = 0;
@@ -131,10 +129,14 @@ pair<float, float> processSamples() {
         if (ch1 & 0x800000) ch1 |= 0xFF000000;
         if (ch2 & 0x800000) ch2 |= 0xFF000000;
 
-        ecgData = (int32_t)ch2;
-        respData = (int32_t)ch1;
+        int32_t ecg = (int32_t)ch2;
+        int32_t resp = (int32_t)ch1;
+
+        // Mostrar els valors
+        Serial.print("ECG: "); Serial.print(ecg);
+        Serial.print(" | RESP: "); Serial.println(resp);
     }
-    return {(float)ecgData, (float)respData};
+    return (float)ecg, (float)resp;
 }
 
 
@@ -161,10 +163,10 @@ void writeRegister(byte regAddress, byte value) {
     digitalWrite(CS, HIGH);
 }
 
-vector<int> detectarPicsR(const int32_t* rrVector, int mida, int32_t llindar) {
+vector<int> detectarPicsR(const int32_t* rrBuffer, int mida, int32_t llindar) {
     vector<int> indexPicsR;
     for (int i = 1; i < mida - 1; ++i) {
-        if (rrVector[i] > llindar && rrVector[i] > rrVector[i-1] && rrVector[i] > rrVector[i+1]) {
+        if (rrBuffer[i] > llindar && rrBuffer[i] > rrBuffer[i-1] && rrBuffer[i] > rrBuffer[i+1]) {
             indexPicsR.push_back(i);
         }
     }
@@ -205,21 +207,19 @@ vector<float> interpolarRR(const vector<float>& rrIntervals, float fsInterpolat 
     return rrInterpolat;
 }
 
-vector<float> calcularFFT(const vector<float>& senyal, float fsInterpolat = 0.4) {
+vector<float> calcularFFT(const vector<float>& senyal, float fs) {
     int N = senyal.size();
     double vReal[N];
     double vImag[N];
-    //int samples = samplingFrequency * fs;
 
     for (int i = 0; i < N; ++i) {
         vReal[i] = senyal[i];
         vImag[i] = 0;
     }
-    ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, N, fsInterpolat);
 
-    FFT.windowing(vReal, N, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-    FFT.compute(vReal, vImag, N, FFT_FORWARD);
-    FFT.complexToMagnitude(vReal, vImag, N);
+    FFT.Windowing(vReal, N, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+    FFT.Compute(vReal, vImag, N, FFT_FORWARD);
+    FFT.ComplexToMagnitude(vReal, vImag, N);
 
     vector<float> magnitud(vReal, vReal + N/2);
     return magnitud;
@@ -250,15 +250,7 @@ pair<float, float> calcularPotenciesLF_HF(const vector<float>& magnitud, float f
 
 void processarBuffer() {
     //Detectar pics R
-    vector<int32_t> rrVector;
-    queue<int32_t> tempQueue = rrBuffer;  // Copia temporal para no perder datos
-
-    while (!tempQueue.empty()) {
-        rrVector.push_back(tempQueue.front());
-        tempQueue.pop();
-    }
-
-    vector<int> rPeaks = detectarPicsR(rrVector.data(), rrVector.size(), LLINDAR);
+    vector<int> rPeaks = detectarPicsR(rrBuffer, RR_BUFFER_SIZE);
 
     //Calcular intervals R-R
     vector<float> rrIntervals;
@@ -271,12 +263,10 @@ void processarBuffer() {
     vector<float> rrInterpolat = interpolarRR(rrIntervals);
 
     //FFT
-    vector<float> magnitudsFFT = calcularFFT(rrInterpolat, fs);
+    vector<float> magnitudsFFT = calculaFFT(rrInterpolat);
 
     //Separar bandes
-    auto potencies = calcularPotenciesLF_HF(magnitudsFFT);
-    potenciaLF = potencies.first;
-    potenciaHF = potencies.second;
+    potenciaLF, potenciaHF = calcularPotencia(magnitudsFFT);
 
     stress = potenciaLF / potenciaHF;
 
@@ -284,11 +274,6 @@ void processarBuffer() {
     data += String(potenciaLF, 1) + "," + String(potenciaHF, 1) + "," + String(stress, 1) + ";";
 }
 
-float convertToMillivolts(long rawValue, float vRef = 2.42, int gain = 6) {
-  const float fullScale = 8388607.0; // 2^23 - 1
-  float voltage = (rawValue / fullScale) * (vRef / gain); // en Volts
-  return voltage * 1000.0; // en mV
-  }
 
 //Control de dades llestes
 void IRAM_ATTR dataReadyISR() {
@@ -342,35 +327,29 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 void setup() {
     //Configuració de pins
-    pinMode(START, OUTPUT);
-    pinMode(RESET, OUTPUT);
-    pinMode(DRDY, INPUT_PULLUP);//DRDY es actiu baix
+    pinMode(START, OUTPUT);//No l'utilitzem per que ho fem per SPI
+    pinMode(RESET, OUTPUT);//No l'utilitzem per que ho fem per SPI
+    pinMode(DRDY, INPUT_PULLUP);  // Normalmente DRDY es activo bajo
     attachInterrupt(digitalPinToInterrupt(DRDY), dataReadyISR, FALLING);
     pinMode(GPIO1, INPUT);
     pinMode(GPIO2, OUTPUT);
-
-    digitalWrite(START, LOW);
-    digitalWrite(RESET, LOW);
-    digitalWrite(GPIO2, LOW);
-
-    
     
 
     //Comandes de sistema SPI
-    Control start = {0x08, 0b00001000};//No l'utilitzem per que ho fem per Hardware
-    Control stop = {0x0A, 0b00001010};//No l'utilitzem per que ho fem per Hardware
-    Control reset = {0x06, 0b00000110};//No l'utilitzem per que ho fem per Hardware
+    Control start = {0x08, 0b00001000};
+    Control stop = {0x0A, 0b00001010};
+    Control reset = {0x06, 0b00000110};
     Control wakeup = {0x02, 0b00000010};
     Control rDataC = {0x10, 0b00010000}; 
     Control sDataC = {0x11, 0b00010001};
     //Inicialització de variables de configuració
-    Control id = { 0x00, 0b01110011 };//OK
-    Control config1 = { 0x01, 0b00000001};//Converió continua, 250SPS
+    Control id = { 0x00, 0b01110011 };
+    Control config1 = { 0x01, 0b00000010};//Converió continua, 500SPS
     Control config2 = { 0x02, 0b10100000};//LeadOff deshabilitat, Habilitem referència interna a 2.42V, deshabilitem sortida de rellotge i tests
     Control loff = {0x03, 0b00010000};//Threshold 95%, 6nA corrent de lead-off, detecció DC 
-    Control ch1set = {0x04, 0b11010001};//Guany 8, Input shorted
-    Control ch2set = {0x05, 0b01100000};//Guany 12, Normal Input
-    Control rldSens = {0x06, 0b00000000};//{0b01101100}ChopFrequency fMod/4, RLD leadOff deshabilitat, RLD no conectat a cap entrada.
+    Control ch1set = {0x04, 0b00000000};//Guany 6, Normal electrode input
+    Control ch2set = {0x05, 0b00000000};//Guany 6, Normal electrode input
+    Control rldSens = {0x06, 0b11000000};//ChopFrequency fMod/4, RLD leadOff deshabilitat, RLD no conectat a cap entrada.
     Control loffSens = {0x07, 0b00000000};//LeadOff deshabilitat
     Control loffStat = {0x08, 0b00000000};//Ignorat per que LOFFSENS no s'utilitza
     Control resp1 = {0x09, 0b11000010};//Modulació i Demodulació activa amb 0 graus de desfase i rellotge intern
@@ -380,7 +359,7 @@ void setup() {
 
     // Inicialització de la comunicació sèrie
     Serial.begin(115200);
-    SPI.begin(SCLK, MISO_PIN, MOSI_PIN, CS); // SCK, MISO, MOSI, CS
+    SPI.begin(SCLK, MISO, MOSI, CS); // SCK, MISO, MOSI, CS
     pinMode(CS, OUTPUT);
     digitalWrite(CS, HIGH);
     SPI.beginTransaction(SPISettings(1000000, MSBFIRST, 1));//Mode comunicació 1 (CPOL=0, CPHA=1)
@@ -404,121 +383,80 @@ void setup() {
     pAdvertising->setScanResponse(false);
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
+    Serial.println("waiting a client connection to notify...");
         
     //Configuració de l'ADS1292R
-    //writeRegister(reset.address, reset.config);//Reset abans d'escriures res
-    writeRegister(wakeup.address, wakeup.config);
-    delayMicroseconds(8);//4 tCLK per activar WakeUp
-    digitalWrite(RESET, HIGH);
-    delay(1000);//Espera d'un segon segons datasheet
-    digitalWrite(RESET, LOW);
-    delayMicroseconds(36);//18 tclk segons datasheet
+    writeRegister(reset.address, reset.config);//Reset abans d'escriures res
     writeRegister(sDataC.address, sDataC.config);//Mode DATAC deshabilitat per poder configurar el dispositiu
-    delayMicroseconds(3);
-    byte idADS = readRegister(id.address);
-    delayMicroseconds(3);
-    if(idADS == id.config){
-      comunicacioSPI_OK = true;
-    }
-    else {
-        comunicacioSPI_OK = false;
-    }
-  
-    writeRegister(config2.address, config2.config);
-    delayMicroseconds(3);
+    writeRegister(id.address, id.config);
     writeRegister(config1.address, config1.config);
-    delayMicroseconds(3);
+    writeRegister(config2.address, config2.config);
     writeRegister(loff.address, loff.config);
-    delayMicroseconds(3);
     writeRegister(ch1set.address, ch1set.config);
-    delayMicroseconds(3);
     writeRegister(ch2set.address, ch2set.config);
-    delayMicroseconds(3);
     writeRegister(rldSens.address, rldSens.config);
-    delayMicroseconds(3);
     writeRegister(loffSens.address, loffSens.config);
-    delayMicroseconds(3);
     writeRegister(loffStat.address, loffStat.config);
-    delayMicroseconds(3);
     writeRegister(resp1.address, resp1.config);
-    delayMicroseconds(3);
     writeRegister(resp2.address, resp2.config);
-    delayMicroseconds(3);
     writeRegister(gpio.address, gpio.config);
-    delayMicroseconds(3);
 
     //Inicialitzem l'ADS1292R
-    
-    //writeRegister(start.address, start.config);//Inicialitzem conversions
-    digitalWrite(START, HIGH);
+    writeRegister(wakeup.address, wakeup.config);
+    writeRegister(start.address, start.config);//Inicialitzem conversions
     writeRegister(rDataC.address, rDataC.config);//Habilitaem mode lectura continua
-    delay(10000);
+    
+  
 }
 
 
 void loop() {
 
-  if (deviceConnected && comunicacioSPI_OK && !notif_enviada) {
-    String notificacio = "¿SPI establerta";
-    pTxCharacteristic->setValue(notificacio.c_str());
-    pTxCharacteristic->notify();
-    notif_enviada = true; // Per evitar enviar-ho més d'un cop
-  }else{
-    if(deviceConnected && !comunicacioSPI_OK && !notif_enviada){
-      String notificacio = "¿SPI NO establerta";
-      pTxCharacteristic->setValue(notificacio.c_str());
-      pTxCharacteristic->notify();
-      notif_enviada = true;
+
+    if(dataReadyFlag) {
+        dataReadyFlag = false;
+        readSPIData();
     }
 
-  }
+    ecg, resp = processSamples(); // Processar les 3 mostres de 24 bits
+    guardarECG(ecg);
+    guardarResp(resp);
+    data += String(ecg, 2) + ",";
+    data += String(resp, 2) + ",";
+    delayMicroseconds(36);//9 mostres amb una freq de 250SPS
+
+    if(bufferPle){
+        bufferPle=false;
+        rrBuffer += ecgBuffer;
+    }
+
+
+
+
 
 
   unsigned long presentPeriod = micros();
+ // Serial.print("resta: ");
+  //Serial.println(presentPeriod-lastPeriod);
   if ((presentPeriod-lastPeriod) >= samplingTime){
  
     lastPeriod = presentPeriod;
     
-    if(dataReadyFlag) {
-      dataReadyFlag = false;
-      readSPIData();
-    }
-
-    auto biosenyals = processSamples(); // Processar les 3 mostres de 24 bits
-    ecg = biosenyals.first;
-    resp = biosenyals.second;
-    guardarECG(ecg);
-    //guardarResp(resp);
-    data += String(convertToMillivolts(ecg), 2) + ",";
-    data += String(convertToMillivolts(resp), 2) + ",";
-    delayMicroseconds(10);//9 mostres amb una freq de 250SPS
-
-    if(bufferPle){
-      bufferPle=false;
-
-      for (int i = 0; i < BUFFER_SIZE; ++i) {
-        rrBuffer.push(ecgBuffer[i]);
-      }
-
-      if (rrBuffer.size()>= RR_BUFFER_SIZE){
-        for (int i = 0; i < BUFFER_SIZE && !rrBuffer.empty(); ++i) {
-          rrBuffer.pop();
-        }
-      }
-    }
+    
     // Incrementar el temps per al següent mostreig
-    // temps += dt;
-    // tempsResp +=dt;
+    temps += dt;
+    tempsResp +=dt;
+
+    nsamples++;
  
   // Cada 1.5 minuts (cada ~90000 ms), afegeix valors SNS, PNS i estrès
 
-    if (millis() - last_sns_time > 90000) {
-      processarBuffer();
-      last_sns_time = millis();
-    } else {
-      data += String(potenciaLF, 1) + "," + String(potenciaHF, 1) + "," + String(stress, 1) + ";";;
-    }
-    nsamples++;
+  if (millis() - last_sns_time > 90000) {
+    processarBuffer()
+    last_sns_time = millis();
+  } else {
+    data += "0.0,0.0,0.0;";
+  }
   }
 
   if (nsamples >= 50){
@@ -526,23 +464,26 @@ void loop() {
       sendLargeData(pTxCharacteristic,data);
       // pTxCharacteristic->setValue(data.c_str());
       // pTxCharacteristic->notify();
-      data = "";
+      Serial.println("Dada enviada");
+      Serial.println(data);
+      Serial.print("nsamples: ");
+      Serial.println(nsamples);
     }
     
     if(!deviceConnected && oldDeviceConnected){
       delay(500);
       pServer -> startAdvertising();
+      Serial.println("Start advertising");
       oldDeviceConnected = deviceConnected;
     }
 
     if (deviceConnected && !oldDeviceConnected){
+      Serial.println("Imprimeixo alguna cosa");
       oldDeviceConnected = deviceConnected;
     }
     
     nsamples = 0;
-    
+    data = "";
   }
   
 }
-
-////////////////////////////////////////////////////////////
