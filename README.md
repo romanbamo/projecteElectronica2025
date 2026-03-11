@@ -17,6 +17,7 @@ A dual-platform bio-signal processing system that utilizes an ESP32 and an ADS12
 
 The system utilizes the **ADS1292R** (24-bit ADC) to capture biopotentials.
 
+<img width="456" height="269" alt="Stress3D" src="https://github.com/user-attachments/assets/7aa7167a-05a1-4270-acd5-01eb6c9ce96e" />
 
 ### Pin Configuration (ESP32)
 
