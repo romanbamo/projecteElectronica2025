@@ -78,9 +78,10 @@ If R-peaks are not being detected in the Python dashboard, adjust the `LLINDAR` 
 
 ## Dashboard (`interface.py`)
 * **Async BLE:** Uses `Bleak` for asynchronous notification handling.
-* **Multi-plot GUI:** * **Top-Left:** Real-time ECG (30s window).
-    * **Bottom-Left:** Respiration wave (60s window).
+* **Multi-plot GUI:** * **Top-Left:** Real-time ECG.
+    * **Bottom-Left:** Respiration wave.
     * **Right:** SNS/PNS balance bars and Stress % indicator.
+<img width="2668" height="1600" alt="StressMeterInterface" src="https://github.com/user-attachments/assets/91006cb0-d005-48a6-b3d4-93e38257b01c" />
 
 
 ---
